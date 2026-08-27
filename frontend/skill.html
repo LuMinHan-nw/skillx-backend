@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <div id="detail" class="panel"></div>
+
+    <div class="panel">
+      <h2>Book a session</h2>
+      <div class="form-row">
+        <div><label for="date">Date</label><input id="date" type="date" required></div>
+        <div><label for="start">Start</label><input id="start" type="time" required></div>
+        <div><label for="end">End</label><input id="end" type="time" required></div>
+      </div>
+      <div id="error" class="form-error" role="alert"></div>
+      <div id="ok" class="form-ok" role="status"></div>
+      <button id="book-btn" class="primary" style="max-width:220px" onclick="book()">Request booking</button>
+    </div>
+
+    <div id="materials-panel" class="panel" hidden>
+      <h2>Learning materials</h2>
+      <p class="lede">Shared by the tutor for students who've booked this session.</p>
+      <div id="materials"></div>
+    </div>
+
+    <div id="tutor-profile" class="panel"></div>
+  </main>
+
+  <script src="/js/api.js?v=2"></script>
+  <script src="/js/nav.js?v=2"></script>
+  <script>
+    requireLogin();
+    renderNav("dashboard.html");
+    const skillId = new URLSearchParams(location.search).get("id");
+    const DAYS = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    let tutorId = null;
+
+    async function loadSkill() {
+      const res = await api("/api/skills/" + skillId);
+      const s = res.data;
+      tutorId = s.tutor_id;
+      const slots = s.availability.length
+        ? s.availability.map(a =>
+            `${DAYS[a.day_of_week]} ${a.start_time.slice(0,5)}-${a.end_time.slice(0,5)}`
+          ).join(", ")
+        : "No slots listed yet";
+      document.getElementById("detail").innerHTML = `
+        <span class="tag">${s.category ?? "General"}</span>
+        <h2 style="font-size:1.35rem">${s.name}</h2>
+        <div class="meta" style="color:var(--muted);font-size:0.85rem;margin-bottom:0.6rem">
+          ${s.tutor} &middot; ${s.proficiency ?? ""} &middot;
+          ${s.session_duration_minutes} min sessions</div>
+        <p style="margin-bottom:0.6rem">${s.description ?? ""}</p>
+        <p style="font-size:0.85rem"><strong>Availability:</strong> ${slots}</p>`;
+      loadTutor();
+      loadMaterials();
+    }
+
+    async function loadMaterials() {
+      try {
+        const res = await api("/api/skills/" + skillId + "/materials");
+        document.getElementById("materials-panel").hidden = false;
+        document.getElementById("materials").innerHTML = res.data.length
+          ? `<table class="data"><tbody>${res.data.map(m => `
+              <tr><td>${m.file_name}</td>
+                  <td style="color:var(--muted)">${m.uploaded_at.slice(0,10)}</td>
+                  <td><button class="small solid"
+                    onclick="downloadMaterial(${m.id},'${m.file_name.replace(/'/g, "\\'")}')">
+                    Download</button></td>
+              </tr>`).join("")}</tbody></table>`
+          : '<p class="empty">No materials uploaded yet.</p>';
+      } catch (err) {
+        // Not the tutor and haven't booked this skill yet — nothing to show.
+      }
+    }
+
+    async function downloadMaterial(id, fileName) {
+      const res = await fetch("/api/materials/" + id + "/download", {
+        headers: { Authorization: "Bearer " + getToken() },
+      });
+      if (!res.ok) { alert("Download failed"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function loadTutor() {
+      const res = await api("/api/users/" + tutorId + "/profile");
+      const p = res.data;
+      const stars = p.avg_rating
+        ? `<span class="stars">${"&#9733;".repeat(Math.round(p.avg_rating))}</span>
+           ${p.avg_rating} (${p.review_count} reviews)`
+        : "No reviews yet";
+      const reviews = p.reviews.slice(0, 5).map(r =>
+        `<tr><td><span class="stars">${"&#9733;".repeat(r.rating)}</span></td>
+             <td>${r.comments ?? ""}</td></tr>`).join("");
+      document.getElementById("tutor-profile").innerHTML = `
+        <h2>About the tutor</h2>
+        <p style="margin-bottom:0.4rem"><strong>${p.name}</strong> &middot; ${stars}</p>
+        <p style="font-size:0.88rem;margin-bottom:0.8rem">${p.bio ?? ""}</p>
+        ${reviews ? `<table class="data"><tbody>${reviews}</tbody></table>` : ""}`;
+    }
+
+    async function book() {
+      const errorBox = document.getElementById("error");
+      const okBox = document.getElementById("ok");
+      const btn = document.getElementById("book-btn");
+      errorBox.classList.remove("show");
+      okBox.classList.remove("show");
+      btn.disabled = true;
+      try {
+        await api("/api/bookings", {
+          method: "POST",
+          body: {
+            skill_id: Number(skillId),
+            session_date: document.getElementById("date").value,
+            start_time: document.getElementById("start").value,
+            end_time: document.getElementById("end").value,
+          },
+        });
+        okBox.textContent = "Booking requested. The tutor will be notified.";
+        okBox.classList.add("show");
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add("show");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    loadSkill();
+  </script>
+</body>
+</html>

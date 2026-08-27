@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookings - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <h1>My bookings</h1>
+    <p class="lede">Sessions you are learning in, and requests for skills you teach.</p>
+
+    <div class="panel">
+      <h2>Awaiting my review</h2>
+      <div id="pending-reviews"></div>
+    </div>
+
+    <div class="panel">
+      <h2>As learner</h2>
+      <div id="as-learner"></div>
+    </div>
+
+    <div class="panel">
+      <h2>As tutor</h2>
+      <div id="as-tutor"></div>
+    </div>
+  </main>
+
+  <script src="/js/api.js?v=2"></script>
+  <script src="/js/nav.js?v=2"></script>
+  <script>
+    requireLogin();
+    renderNav("bookings.html");
+
+    function bookingRow(b, actions) {
+      const link = b.meeting_link
+        ? `<br><a href="${b.meeting_link}" target="_blank" rel="noopener">Join session</a>`
+        : "";
+      return `<tr>
+        <td>${b.skill}</td>
+        <td>${b.session_date}<br>
+            <span style="color:var(--muted);font-size:0.8rem">
+              ${b.start_time.slice(0,5)}-${b.end_time.slice(0,5)}</span>${link}</td>
+        <td>${b.tutor === getName() ? b.learner : b.tutor}</td>
+        <td><span class="status-badge status-${b.status}">${b.status}</span></td>
+        <td>${actions}</td>
+      </tr>`;
+    }
+
+    function table(rows) {
+      return rows.length
+        ? `<table class="data"><thead><tr>
+             <th>Skill</th><th>When</th><th>With</th><th>Status</th><th></th>
+           </tr></thead><tbody>${rows.join("")}</tbody></table>`
+        : '<p class="empty">Nothing here yet.</p>';
+    }
+
+    async function act(path, body, btn) {
+      if (btn) btn.disabled = true;
+      try {
+        await api(path, { method: "PUT", body: body ?? {} });
+        load();
+      } catch (err) {
+        alert(err.message);
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function meetingLinkPrompt(id, current) {
+      const link = prompt("Meeting link (Zoom, Google Meet, etc.):", current || "");
+      if (!link) return;
+      act("/api/bookings/" + id + "/meeting-link", { meeting_link: link });
+    }
+
+    function reschedulePrompt(id) {
+      const date = prompt("New date (YYYY-MM-DD):");
+      if (!date) return;
+      const start = prompt("New start time (HH:MM):", "14:00");
+      if (!start) return;
+      const end = prompt("New end time (HH:MM):", "15:00");
+      if (!end) return;
+      act("/api/bookings/" + id + "/reschedule",
+          { session_date: date, start_time: start, end_time: end });
+    }
+
+    async function rate(bookingId, skill, other) {
+      const rating = prompt(`Rate your session "${skill}" with ${other} (1-5):`, "5");
+      if (!rating) return;
+      const comments = prompt("Comments (optional):") || null;
+      try {
+        await api("/api/feedback", {
+          method: "POST",
+          body: { booking_id: bookingId, rating: Number(rating), comments },
+        });
+        load();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function load() {
+      const res = await api("/api/bookings/mine");
+
+      const learnerRows = res.data.as_learner.map(b => {
+        let actions = "";
+        if (["pending", "confirmed", "rescheduled"].includes(b.status)) {
+          actions += `<button class="small" onclick="reschedulePrompt(${b.id})">Reschedule</button>`;
+          actions += `<button class="small danger"
+            onclick="act('/api/bookings/${b.id}/cancel',{reason:null},this)">Cancel</button>`;
+        }
+        return bookingRow(b, actions);
+      });
+      document.getElementById("as-learner").innerHTML = table(learnerRows);
+
+      const tutorRows = res.data.as_tutor.map(b => {
+        let actions = "";
+        if (["pending", "rescheduled"].includes(b.status)) {
+          actions += `<button class="small solid"
+            onclick="act('/api/bookings/${b.id}/accept',null,this)">Accept</button>`;
+          actions += `<button class="small danger"
+            onclick="act('/api/bookings/${b.id}/decline',null,this)">Decline</button>`;
+        }
+        if (b.status === "confirmed") {
+          actions += `<button class="small solid"
+            onclick="act('/api/bookings/${b.id}/complete',null,this)">Mark completed</button>`;
+          // The existing link is carried on a data attribute rather than written
+          // straight into the onclick, because a quote inside the value would
+          // otherwise close the attribute and break the button.
+          actions += `<button class="small"
+            data-link="${(b.meeting_link || "").replace(/"/g, "&quot;")}"
+            onclick="meetingLinkPrompt(${b.id}, this.dataset.link)">
+            ${b.meeting_link ? "Edit" : "Set"} meeting link</button>`;
+          actions += `<button class="small" onclick="reschedulePrompt(${b.id})">Reschedule</button>`;
+          actions += `<button class="small danger"
+            onclick="act('/api/bookings/${b.id}/cancel',{reason:null},this)">Cancel</button>`;
+        }
+        return bookingRow(b, actions);
+      });
+      document.getElementById("as-tutor").innerHTML = table(tutorRows);
+
+      const pend = await api("/api/feedback/pending");
+      document.getElementById("pending-reviews").innerHTML = pend.data.length
+        ? `<table class="data"><tbody>${pend.data.map(p => `
+            <tr><td>${p.skill}</td><td>${p.session_date}</td><td>${p.other_party}</td>
+                <td><button class="small solid"
+                  onclick="rate(${p.booking_id},'${p.skill}','${p.other_party}')">
+                  Rate session</button></td></tr>`).join("")}</tbody></table>`
+        : '<p class="empty">No completed sessions waiting for your rating.</p>';
+    }
+
+    load();
+  </script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alerts - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <h1>Alerts</h1>
+    <p class="lede">Booking updates, approvals, reviews and certificates.</p>
+    <div id="list" class="panel"></div>
+  </main>
+
+  <script src="/js/api.js?v=2"></script>
+  <script src="/js/nav.js?v=2"></script>
+  <script>
+    requireLogin();
+    renderNav("notifications.html");
+
+    async function markRead(id) {
+      await api("/api/notifications/" + id + "/read", { method: "PUT" });
+      load();
+    }
+
+    async function load() {
+      const res = await api("/api/notifications");
+      document.getElementById("list").innerHTML = res.data.length
+        ? `<table class="data"><tbody>${res.data.map(n => `
+            <tr style="${n.is_read ? "color:var(--muted)" : "font-weight:600"}">
+              <td>${n.message}</td>
+              <td style="white-space:nowrap;color:var(--muted);font-weight:400">
+                ${n.sent_at.slice(0,16).replace("T"," ")}</td>
+              <td>${n.is_read ? "" :
+                `<button class="small" onclick="markRead(${n.id})">Mark read</button>`}</td>
+            </tr>`).join("")}</tbody></table>`
+        : '<p class="empty">No alerts yet.</p>';
+    }
+
+    load();
+  </script>
+</body>
+</html>

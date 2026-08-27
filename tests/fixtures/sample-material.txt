@@ -1,0 +1,2 @@
+Sample learning material used by the Postman QA suite (TC-MAT-01).
+Not real course content — just needs to exist as a file the upload test can attach.

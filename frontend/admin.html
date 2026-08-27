@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <section data-view="dashboard" hidden>
+      <h1>Administration dashboard</h1>
+      <p class="lede">Platform totals, and the listings waiting on your review.</p>
+
+      <div id="stats" class="stat-grid"></div>
+
+      <div class="panel">
+        <h2>Pending skill approvals</h2>
+        <div id="pending"></div>
+      </div>
+    </section>
+
+    <section data-view="skills" hidden>
+      <h1>Skill listings</h1>
+      <p class="lede">Every approved listing on the platform.</p>
+
+      <div class="panel">
+        <h2>Approved skills</h2>
+        <p class="lede">Remove a listing that later turns out to be inappropriate.</p>
+        <div id="approved"></div>
+      </div>
+    </section>
+
+    <section data-view="categories" hidden>
+      <h1>Skill categories</h1>
+      <p class="lede">Students pick one of these when they list a skill.</p>
+
+      <div class="panel">
+        <h2>Add a category</h2>
+        <div class="form-row" style="align-items:end">
+          <div><label for="cat-name">Name</label><input id="cat-name" type="text"></div>
+          <div><label for="cat-desc">Description</label><input id="cat-desc" type="text"></div>
+          <button class="small solid" style="margin-bottom:0.4rem"
+                  onclick="addCategory()">Add category</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>All categories</h2>
+        <div id="categories"></div>
+      </div>
+    </section>
+
+    <section data-view="users" hidden>
+      <h1>Students</h1>
+      <p class="lede">Accounts, suspensions and password reset requests.</p>
+
+      <div class="panel">
+        <h2>Student accounts</h2>
+        <div class="toolbar">
+          <input id="user-search" type="text" placeholder="Search name or email">
+          <button class="primary" onclick="loadUsers()">Search</button>
+        </div>
+        <div id="users"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Password reset requests</h2>
+        <p class="lede">Approve after verifying it's really them (in person, chat,
+          etc.) — the student then sets their own new password, you never see it.
+          An approval is only valid for 10 minutes.</p>
+        <div id="password-resets"></div>
+      </div>
+    </section>
+
+    <section data-view="certificates" hidden>
+      <h1>Certificates</h1>
+      <p class="lede">Issued records, and a lookup for verifying a code someone shows you.</p>
+
+      <div class="panel">
+        <h2>Verify a certificate</h2>
+        <div class="toolbar">
+          <input id="verify-code" type="text" placeholder="Certificate code, e.g. CERT-2026-AB12CD">
+          <button class="primary" onclick="verifyCertificate()">Verify</button>
+        </div>
+        <div id="verify-result"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Certificate records</h2>
+        <div id="certificates"></div>
+      </div>
+    </section>
+
+    <section data-view="complaints" hidden>
+      <h1>Complaints &amp; feedback</h1>
+      <p class="lede">Problems students reported, and the ratings they leave each other.</p>
+
+      <div class="panel">
+        <h2>Complaints</h2>
+        <p class="lede">Students report a problem from their profile page.</p>
+        <div id="complaints"></div>
+      </div>
+
+      <div class="panel">
+        <h2>User feedback</h2>
+        <p class="lede">Two-way ratings students leave each other after a session.</p>
+        <div id="feedback"></div>
+      </div>
+    </section>
+
+    <section data-view="reports" hidden>
+      <h1>Reports</h1>
+      <p class="lede">Demand, quality and activity across the platform.</p>
+
+      <div class="panel">
+        <h2>Demand</h2>
+        <div class="form-row">
+          <div><h3 style="font-size:0.88rem;margin-bottom:0.6rem">Top requested skills</h3>
+            <div id="top-skills"></div></div>
+          <div><h3 style="font-size:0.88rem;margin-bottom:0.6rem">Completed exchanges per week</h3>
+            <div id="weekly"></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Quality</h2>
+        <div class="form-row">
+          <div><h3 style="font-size:0.88rem;margin-bottom:0.6rem">Top rated students</h3>
+            <div id="top-students"></div></div>
+          <div><h3 style="font-size:0.88rem;margin-bottom:0.6rem">Average rating per category</h3>
+            <div id="by-category"></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/api.js?v=2"></script>
+  <script src="/js/nav.js?v=2"></script>
+  <script>
+    requireLogin();
+    if (getRole() !== "admin") location.href = "/dashboard.html";
+    renderNav("admin.html");
+
+    function miniTable(rows, headers) {
+      return rows.length
+        ? `<table class="data"><thead><tr>
+             ${headers.map(h => `<th>${h}</th>`).join("")}
+           </tr></thead><tbody>${rows.join("")}</tbody></table>`
+        : '<p class="empty">No data yet.</p>';
+    }
+
+    async function loadStats() {
+      const res = await api("/api/dashboard/summary");
+      const s = res.data;
+      const items = [
+        [s.total_students, "Students"], [s.total_skills, "Skills"],
+        [s.pending_skills, "Pending approval"], [s.total_bookings, "Total bookings"],
+        [s.completed_sessions, "Completed sessions"], [s.certificates_issued, "Certificates"],
+      ];
+      document.getElementById("stats").innerHTML = items.map(([n, l]) =>
+        `<div class="stat"><div class="num">${n}</div><div class="lbl">${l}</div></div>`
+      ).join("");
+    }
+
+    async function review(id, action) {
+      try {
+        await api("/api/admin/skills/" + id + "/" + action, { method: "PUT" });
+        loadPending(); loadApproved(); loadStats();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function loadPending() {
+      const res = await api("/api/admin/skills/pending");
+      document.getElementById("pending").innerHTML = miniTable(
+        res.data.map(s => `<tr>
+          <td>${s.name}</td><td>${s.tutor}</td><td>${s.category}</td>
+          <td>${s.proficiency ?? ""}</td>
+          <td>
+            <button class="small solid" onclick="review(${s.id},'approve')">Approve</button>
+            <button class="small danger" onclick="review(${s.id},'reject')">Reject</button>
+          </td></tr>`),
+        ["Skill", "Tutor", "Category", "Level", "Action"]);
+    }
+
+    async function loadApproved() {
+      const res = await api("/api/skills");
+      document.getElementById("approved").innerHTML = miniTable(
+        res.data.map(s => `<tr>
+          <td>${s.name}</td><td>${s.tutor}</td><td>${s.category}</td>
+          <td>${s.proficiency ?? ""}</td>
+          <td><button class="small danger" onclick="removeApproved(${s.id})">Remove</button></td>
+          </tr>`),
+        ["Skill", "Tutor", "Category", "Level", "Action"]);
+    }
+
+    async function removeApproved(id) {
+      if (!confirm("Remove this skill listing?")) return;
+      try {
+        await api("/api/admin/skills/" + id + "/reject", { method: "PUT" });
+        loadApproved(); loadStats();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function loadCertificates() {
+      const res = await api("/api/admin/certificates");
+      document.getElementById("certificates").innerHTML = miniTable(
+        res.data.map(c => `<tr>
+          <td>${c.certificate_code}</td><td>${c.student}</td>
+          <td>${c.sessions_completed}</td><td>${c.issued_at.slice(0,10)}</td>
+          <td><button class="small danger" onclick="removeCertificate(${c.id})">Remove</button></td>
+          </tr>`),
+        ["Code", "Student", "Sessions", "Issued", "Action"]);
+    }
+
+    async function removeCertificate(id) {
+      if (!confirm("Remove this certificate record?")) return;
+      try {
+        await api("/api/admin/certificates/" + id, { method: "DELETE" });
+        loadCertificates(); loadStats();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function verifyCertificate() {
+      const code = document.getElementById("verify-code").value.trim();
+      const box = document.getElementById("verify-result");
+      if (!code) { box.innerHTML = ""; return; }
+      try {
+        const res = await api("/api/certificates/verify/" + encodeURIComponent(code));
+        const c = res.data;
+        box.innerHTML = `<p class="form-ok show">Valid — issued to ${c.student} for
+          ${c.sessions_completed} sessions on ${c.issued_at.slice(0,10)}.</p>`;
+      } catch (err) {
+        box.innerHTML = `<p class="form-error show">${err.message}</p>`;
+      }
+    }
+
+    async function loadComplaints() {
+      const res = await api("/api/admin/complaints");
+      document.getElementById("complaints").innerHTML = miniTable(
+        res.data.map(c => `<tr>
+          <td>${c.student}</td><td>${c.subject}</td><td>${c.message}</td>
+          <td>${c.created_at.slice(0,10)}</td>
+          <td><span class="status-badge status-${c.status === "open" ? "pending" : "active"}">${c.status}</span></td>
+          <td>${c.status === "open"
+            ? `<button class="small solid" onclick="resolveComplaint(${c.id})">Resolve</button>`
+            : (c.admin_response ?? "")}</td>
+          </tr>`),
+        ["Student", "Subject", "Message", "Reported", "Status", "Action / response"]);
+    }
+
+    async function resolveComplaint(id) {
+      const response = prompt("Response to the student (what did you do about this?):");
+      if (!response) return;
+      try {
+        await api("/api/admin/complaints/" + id + "/resolve", {
+          method: "PUT",
+          body: { admin_response: response },
+        });
+        loadComplaints();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function loadFeedback() {
+      const res = await api("/api/admin/feedback");
+      document.getElementById("feedback").innerHTML = miniTable(
+        res.data.map(f => `<tr>
+          <td>${f.given_by}</td><td>${f.given_to}</td>
+          <td><span class="stars">${"&#9733;".repeat(f.rating)}</span></td>
+          <td>${f.comments ?? ""}</td><td>${f.submitted_at.slice(0,10)}</td>
+          </tr>`),
+        ["From", "About", "Rating", "Comments", "Date"]);
+    }
+
+    async function editUser(id, name, phone, bio) {
+      const newName = prompt("Name:", name);
+      if (!newName) return;
+      const newPhone = prompt("Phone:", phone || "");
+      const newBio = prompt("Bio:", bio || "");
+      try {
+        await api("/api/admin/users/" + id, {
+          method: "PUT",
+          body: { name: newName, phone: newPhone || null, bio: newBio || null },
+        });
+        loadUsers();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function setStatus(id, action) {
+      try {
+        await api("/api/admin/users/" + id + "/" + action, { method: "PUT" });
+        loadUsers();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function loadPasswordResets() {
+      const res = await api("/api/admin/password-resets");
+      document.getElementById("password-resets").innerHTML = miniTable(
+        res.data.map(r => `<tr>
+          <td>${r.student}</td><td>${r.email}</td>
+          <td>${r.requested_at.slice(0,16).replace("T"," ")}</td>
+          <td><span class="status-badge status-${r.status === "pending" ? "pending" : r.status === "approved" ? "active" : r.status === "completed" ? "active" : "suspended"}">${r.status}</span></td>
+          <td>${r.status === "pending"
+            ? `<button class="small solid" onclick="approvePasswordReset(${r.id})">Approve</button>`
+            : ""}</td>
+          </tr>`),
+        ["Student", "Email", "Requested", "Status", "Action"]);
+    }
+
+    async function approvePasswordReset(id) {
+      if (!confirm("Only approve after you've verified this is really them.")) return;
+      try {
+        await api("/api/admin/password-resets/" + id + "/approve", { method: "PUT" });
+        loadPasswordResets();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function loadUsers() {
+      const search = document.getElementById("user-search").value.trim();
+      const res = await api("/api/admin/users" + (search ? "?search=" + encodeURIComponent(search) : ""));
+      document.getElementById("users").innerHTML = miniTable(
+        res.data.map(u => `<tr>
+          <td>${u.name}</td><td>${u.email}</td>
+          <td><span class="status-badge status-${u.status}">${u.status}</span></td>
+          <td>${u.status === "active"
+            ? `<button class="small danger" onclick="setStatus(${u.id},'suspend')">Suspend</button>`
+            : `<button class="small solid" onclick="setStatus(${u.id},'reactivate')">Reactivate</button>`}
+            <button class="small" onclick="editUser(${u.id},'${u.name.replace(/'/g, "\\'")}','${(u.phone||'').replace(/'/g, "\\'")}','${(u.bio||'').replace(/'/g, "\\'")}')">Edit</button>
+          </td></tr>`),
+        ["Name", "Email", "Status", "Action"]);
+    }
+
+    async function addCategory() {
+      try {
+        await api("/api/admin/categories", {
+          method: "POST",
+          body: {
+            name: document.getElementById("cat-name").value,
+            description: document.getElementById("cat-desc").value || null,
+          },
+        });
+        document.getElementById("cat-name").value = "";
+        document.getElementById("cat-desc").value = "";
+        loadCategories();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function removeCategory(id) {
+      try {
+        await api("/api/admin/categories/" + id, { method: "DELETE" });
+        loadCategories();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function loadCategories() {
+      const res = await api("/api/skills/categories");
+      document.getElementById("categories").innerHTML = miniTable(
+        res.data.map(c => `<tr>
+          <td>${c.name}</td><td>${c.description ?? ""}</td>
+          <td><button class="small danger" onclick="removeCategory(${c.id})">Delete</button></td>
+        </tr>`),
+        ["Name", "Description", "Action"]);
+    }
+
+    async function loadAnalytics() {
+      const topSkills = await api("/api/dashboard/top-skills");
+      document.getElementById("top-skills").innerHTML = miniTable(
+        topSkills.data.map(r => `<tr><td>${r.skill}</td><td>${r.bookings}</td></tr>`),
+        ["Skill", "Bookings"]);
+
+      const topStudents = await api("/api/dashboard/top-students");
+      document.getElementById("top-students").innerHTML = miniTable(
+        topStudents.data.map(r => `<tr><td>${r.student}</td>
+          <td><span class="stars">${"&#9733;".repeat(Math.round(r.avg_rating))}</span>
+              ${r.avg_rating}</td><td>${r.reviews}</td></tr>`),
+        ["Student", "Rating", "Reviews"]);
+
+      const weekly = await api("/api/dashboard/exchanges-weekly");
+      document.getElementById("weekly").innerHTML = miniTable(
+        weekly.data.map(r => `<tr><td>${r.week}</td><td>${r.completed}</td></tr>`),
+        ["Week", "Completed"]);
+
+      const byCat = await api("/api/dashboard/rating-by-category");
+      document.getElementById("by-category").innerHTML = miniTable(
+        byCat.data.map(r => `<tr><td>${r.category}</td><td>${r.avg_rating}</td>
+          <td>${r.reviews}</td></tr>`),
+        ["Category", "Avg rating", "Reviews"]);
+    }
+
+    loadStats(); loadPending(); loadApproved(); loadCertificates(); loadComplaints();
+    loadPasswordResets(); loadFeedback(); loadUsers(); loadCategories(); loadAnalytics();
+  </script>
+</body>
+</html>

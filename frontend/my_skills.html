@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My skills - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <h1>My skills</h1>
+    <p class="lede">Listings you offer. New and edited skills wait for admin approval.</p>
+
+    <div class="panel">
+      <h2 id="form-title">Offer a new skill</h2>
+      <div class="form-row">
+        <div><label for="name">Skill name</label><input id="name" type="text"></div>
+        <div><label for="category">Category</label><select id="category"></select></div>
+      </div>
+      <div class="form-row">
+        <div><label for="proficiency">Proficiency</label>
+          <select id="proficiency">
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select></div>
+        <div><label for="duration">Session minutes (30-240)</label>
+          <input id="duration" type="number" value="60" min="30" max="240"></div>
+      </div>
+      <label for="description">Description</label>
+      <input id="description" type="text" maxlength="500">
+      <div id="error" class="form-error" role="alert"></div>
+      <div id="ok" class="form-ok" role="status"></div>
+      <div style="display:flex;gap:0.6rem">
+        <button class="primary" style="max-width:200px" onclick="saveSkill()">Save skill</button>
+        <button class="small" id="cancel-edit" style="display:none;margin-top:1.4rem"
+                onclick="resetForm()">Cancel edit</button>
+      </div>
+    </div>
+
+    <div id="list"></div>
+  </main>
+
+  <script src="/js/api.js?v=2"></script>
+  <script src="/js/nav.js?v=2"></script>
+  <script>
+    requireLogin();
+    renderNav("my_skills.html");
+    const DAYS = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    let editingId = null;
+
+    async function loadCategories() {
+      const res = await api("/api/skills/categories");
+      const select = document.getElementById("category");
+      select.innerHTML = "";
+      for (const c of res.data) {
+        const option = document.createElement("option");
+        option.value = c.id;
+        option.textContent = c.name;
+        select.appendChild(option);
+      }
+    }
+
+    function resetForm() {
+      editingId = null;
+      document.getElementById("form-title").textContent = "Offer a new skill";
+      document.getElementById("cancel-edit").style.display = "none";
+      for (const id of ["name", "description"]) document.getElementById(id).value = "";
+      document.getElementById("duration").value = 60;
+    }
+
+    function startEdit(s) {
+      editingId = s.id;
+      document.getElementById("form-title").textContent = "Edit skill: " + s.name;
+      document.getElementById("cancel-edit").style.display = "inline-block";
+      document.getElementById("name").value = s.name;
+      document.getElementById("description").value = s.description ?? "";
+      document.getElementById("category").value = s.category_id;
+      document.getElementById("proficiency").value = s.proficiency ?? "beginner";
+      document.getElementById("duration").value = s.session_duration_minutes;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    async function saveSkill() {
+      const errorBox = document.getElementById("error");
+      const okBox = document.getElementById("ok");
+      errorBox.classList.remove("show");
+      okBox.classList.remove("show");
+      const body = {
+        name: document.getElementById("name").value,
+        description: document.getElementById("description").value || null,
+        category_id: Number(document.getElementById("category").value),
+        proficiency: document.getElementById("proficiency").value,
+        session_duration_minutes: Number(document.getElementById("duration").value),
+      };
+      try {
+        const res = editingId
+          ? await api("/api/skills/" + editingId, { method: "PUT", body })
+          : await api("/api/skills", { method: "POST", body });
+        okBox.textContent = res.message;
+        okBox.classList.add("show");
+        resetForm();
+        loadMine();
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add("show");
+      }
+    }
+
+    async function removeSkill(id) {
+      if (!confirm("Delete this skill listing?")) return;
+      try {
+        await api("/api/skills/" + id, { method: "DELETE" });
+        loadMine();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function addSlot(id) {
+      const day = document.getElementById("day-" + id).value;
+      const start = document.getElementById("slot-start-" + id).value;
+      const end = document.getElementById("slot-end-" + id).value;
+      try {
+        await api("/api/skills/" + id + "/availability", {
+          method: "POST",
+          body: { day_of_week: Number(day), start_time: start, end_time: end },
+        });
+        loadMine();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function removeSlot(skillId, slotId) {
+      try {
+        await api("/api/skills/" + skillId + "/availability/" + slotId,
+                  { method: "DELETE" });
+        loadMine();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function loadMine() {
+      const res = await api("/api/skills/mine");
+      const list = document.getElementById("list");
+      list.innerHTML = res.data.length ? "" : '<p class="empty">No skills listed yet.</p>';
+      for (const s of res.data) {
+        const slots = s.availability.map(a => `
+          <span class="tag" style="margin-right:0.4rem">
+            ${DAYS[a.day_of_week]} ${a.start_time.slice(0,5)}-${a.end_time.slice(0,5)}
+            <a href="#" onclick="removeSlot(${s.id},${a.id});return false"
+               style="color:var(--danger);text-decoration:none">&times;</a>
+          </span>`).join("");
+        const panel = document.createElement("div");
+        panel.className = "panel";
+        panel.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:start;gap:0.6rem">
+            <div>
+              <h2 style="margin-bottom:0.2rem">${s.name}
+                <span class="status-badge status-${s.status}">${s.status}</span></h2>
+              <div style="color:var(--muted);font-size:0.82rem;margin-bottom:0.5rem">
+                ${s.category} &middot; ${s.proficiency} &middot;
+                ${s.session_duration_minutes} min</div>
+              <p style="font-size:0.88rem">${s.description ?? ""}</p>
+            </div>
+            <div style="white-space:nowrap">
+              <button class="small" onclick='startEdit(${JSON.stringify(s)})'>Edit</button>
+              <button class="small danger" onclick="removeSkill(${s.id})">Delete</button>
+            </div>
+          </div>
+          <div style="margin-top:0.8rem">${slots}</div>
+          <div class="form-row" style="margin-top:0.6rem;align-items:end">
+            <div style="max-width:120px"><label>Day</label>
+              <select id="day-${s.id}">
+                ${DAYS.slice(1).map((d,i) => `<option value="${i+1}">${d}</option>`).join("")}
+              </select></div>
+            <div style="max-width:120px"><label>From</label>
+              <input id="slot-start-${s.id}" type="time"></div>
+            <div style="max-width:120px"><label>To</label>
+              <input id="slot-end-${s.id}" type="time"></div>
+            <button class="small solid" style="margin-bottom:0.35rem"
+                    onclick="addSlot(${s.id})">Add slot</button>
+          </div>
+          <div style="margin-top:0.8rem">
+            <label style="font-size:0.82rem;color:var(--muted)">Learning materials</label>
+            <div id="materials-${s.id}"></div>
+            <div style="display:flex;gap:0.6rem;align-items:center;margin-top:0.4rem">
+              <input id="material-file-${s.id}" type="file">
+              <button class="small solid" onclick="uploadMaterial(${s.id})">Upload</button>
+            </div>
+          </div>`;
+        list.appendChild(panel);
+        loadMaterials(s.id);
+      }
+    }
+
+    async function loadMaterials(skillId) {
+      const box = document.getElementById("materials-" + skillId);
+      try {
+        const res = await api("/api/skills/" + skillId + "/materials");
+        box.innerHTML = res.data.length
+          ? res.data.map(m => `
+              <span class="tag" style="margin-right:0.4rem">
+                ${m.file_name}
+                <a href="#" onclick="removeMaterial(${skillId},${m.id});return false"
+                   style="color:var(--danger);text-decoration:none">&times;</a>
+              </span>`).join("")
+          : '<p class="empty" style="margin:0.3rem 0">No materials uploaded yet.</p>';
+      } catch (err) {
+        box.innerHTML = "";
+      }
+    }
+
+    async function uploadMaterial(skillId) {
+      const input = document.getElementById("material-file-" + skillId);
+      const file = input.files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        await api("/api/skills/" + skillId + "/materials", { method: "POST", body: form });
+        input.value = "";
+        loadMaterials(skillId);
+      } catch (err) { alert(err.message); }
+    }
+
+    async function removeMaterial(skillId, materialId) {
+      if (!confirm("Remove this file?")) return;
+      try {
+        await api("/api/skills/" + skillId + "/materials/" + materialId,
+                  { method: "DELETE" });
+        loadMaterials(skillId);
+      } catch (err) { alert(err.message); }
+    }
+
+    loadCategories();
+    loadMine();
+  </script>
+</body>
+</html>

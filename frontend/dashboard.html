@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browse skills - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <h1>Browse skills</h1>
+    <p class="lede">Approved skills other students are offering right now.</p>
+
+    <div class="toolbar">
+      <input id="search" type="text" placeholder="Search by keyword">
+      <select id="category"><option value="">All categories</option></select>
+      <button class="primary" onclick="loadSkills()">Search</button>
+    </div>
+
+    <div id="skills" class="card-grid"></div>
+    <p id="empty" class="empty" hidden>No skills match. Try a different search.</p>
+  </main>
+
+  <script src="/js/api.js?v=2"></script>
+  <script src="/js/nav.js?v=2"></script>
+  <script>
+    requireLogin();
+    renderNav("dashboard.html");
+
+    async function loadCategories() {
+      const res = await api("/api/skills/categories");
+      const select = document.getElementById("category");
+      for (const c of res.data) {
+        const option = document.createElement("option");
+        option.value = c.id;
+        option.textContent = c.name;
+        select.appendChild(option);
+      }
+    }
+
+    async function loadSkills() {
+      const params = new URLSearchParams();
+      const search = document.getElementById("search").value.trim();
+      const category = document.getElementById("category").value;
+      if (search) params.set("search", search);
+      if (category) params.set("category_id", category);
+
+      const res = await api("/api/skills?" + params.toString());
+      const grid = document.getElementById("skills");
+      grid.innerHTML = "";
+      document.getElementById("empty").hidden = res.data.length > 0;
+
+      for (const s of res.data) {
+        const card = document.createElement("a");
+        card.className = "skill-card";
+        card.style.textDecoration = "none";
+        card.style.display = "block";
+        card.href = "/skill.html?id=" + s.id;
+        card.innerHTML = `
+          <span class="tag">${s.category ?? "General"}</span>
+          <h3>${s.name}</h3>
+          <div class="meta">${s.tutor ?? ""} &middot; ${s.proficiency ?? ""} &middot;
+               ${s.session_duration_minutes} min sessions</div>
+          <p>${s.description ?? ""}</p>`;
+        grid.appendChild(card);
+      }
+    }
+
+    loadCategories();
+    loadSkills();
+  </script>
+</body>
+</html>

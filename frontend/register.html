@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create account - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-art">
+        <h2>Join the exchange</h2>
+        <p>Every student can teach something, and every student wants to learn
+          something. Create your account with your university email to start.</p>
+      </div>
+
+      <div class="auth-form">
+        <h1>Create account</h1>
+        <p class="sub">Use your @skillx.com student email</p>
+
+        <form id="register-form">
+          <label for="name">Full name</label>
+          <input id="name" type="text" required minlength="1" maxlength="100"
+                 autocomplete="name">
+
+          <label for="email">Email</label>
+          <input id="email" type="email" required maxlength="150" autocomplete="email"
+                 placeholder="you@skillx.com" pattern="^[^\s@]+@skillx\.com$"
+                 title="Must be a @skillx.com email address">
+
+          <label for="password">Password (6+ characters)</label>
+          <input id="password" type="password" required minlength="6" maxlength="72"
+                 autocomplete="new-password">
+
+          <label for="phone">Phone (optional)</label>
+          <input id="phone" type="tel" maxlength="20" autocomplete="tel">
+
+          <div id="error" class="form-error" role="alert"></div>
+          <button class="primary" type="submit">Create account</button>
+        </form>
+
+        <p class="switch-link">Already registered? <a href="/login.html">Log in</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js?v=2"></script>
+  <script>
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById("error");
+      errorBox.classList.remove("show");
+
+      try {
+        const res = await api("/api/auth/register", {
+          method: "POST",
+          body: {
+            name: document.getElementById("name").value,
+            email: document.getElementById("email").value,
+            password: document.getElementById("password").value,
+            phone: document.getElementById("phone").value || null,
+          },
+        });
+        saveLogin(res.data);
+        window.location.href = "/dashboard.html";
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add("show");
+      }
+    });
+  </script>
+</body>
+</html>

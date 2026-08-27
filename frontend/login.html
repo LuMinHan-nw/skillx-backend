@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log in - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-art">
+        <h2>Welcome back to SkillX</h2>
+        <p>The student skill exchange platform. Learn something new from a
+          classmate this week, and teach what you already know back.</p>
+      </div>
+
+      <div class="auth-form">
+        <h1>User login</h1>
+        <p class="sub">Sign in with your student account</p>
+
+        <form id="login-form">
+          <label for="email">Email</label>
+          <input id="email" type="email" required maxlength="150" autocomplete="email">
+
+          <label for="password">Password</label>
+          <input id="password" type="password" required maxlength="72"
+                 autocomplete="current-password">
+
+          <div id="error" class="form-error" role="alert"></div>
+          <button class="primary" type="submit">Log in</button>
+        </form>
+
+        <p class="switch-link">New here? <a href="/register.html">Create an account</a></p>
+        <p class="switch-link">Forgot your password? <a href="/forgot-password.html">Reset it</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js?v=2"></script>
+  <script>
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById("error");
+      errorBox.classList.remove("show");
+
+      try {
+        const res = await api("/api/auth/login", {
+          method: "POST",
+          body: {
+            email: document.getElementById("email").value,
+            password: document.getElementById("password").value,
+          },
+        });
+        saveLogin(res.data);
+        window.location.href = res.data.user.role === "admin" ? "/admin.html" : "/dashboard.html";
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add("show");
+      }
+    });
+  </script>
+</body>
+</html>

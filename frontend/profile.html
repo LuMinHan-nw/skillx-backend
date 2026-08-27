@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <h1>My profile</h1>
+    <p class="lede">This is what other students see next to your listings and reviews.</p>
+
+    <div class="panel">
+      <div style="display:flex;gap:1rem;align-items:center;margin-bottom:0.8rem">
+        <img id="avatar" class="avatar" src="" alt="" hidden>
+        <div>
+          <label for="picture">Profile picture (png/jpg, max 2 MB)</label>
+          <input id="picture" type="file" accept=".png,.jpg,.jpeg,.webp">
+        </div>
+      </div>
+      <div class="form-row">
+        <div><label for="name">Full name</label><input id="name" type="text"></div>
+        <div><label for="phone">Phone</label><input id="phone" type="tel"></div>
+      </div>
+      <label for="bio">Bio</label>
+      <input id="bio" type="text" maxlength="500">
+      <div id="error" class="form-error" role="alert"></div>
+      <div id="ok" class="form-ok" role="status"></div>
+      <button class="primary" style="max-width:200px" onclick="save()">Save profile</button>
+    </div>
+
+    <div class="panel">
+      <h2>My public ratings</h2>
+      <div id="ratings"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Report a problem</h2>
+      <p class="lede">Tell an admin about a tutor, learner or listing issue. You'll be
+        notified in-app once it's reviewed.</p>
+      <div class="form-row">
+        <div><label for="complaint-subject">Subject</label>
+          <input id="complaint-subject" type="text" maxlength="150"></div>
+      </div>
+      <label for="complaint-message">What happened?</label>
+      <input id="complaint-message" type="text" maxlength="1000">
+      <div id="complaint-error" class="form-error" role="alert"></div>
+      <div id="complaint-ok" class="form-ok" role="status"></div>
+      <button class="primary" style="max-width:200px" onclick="submitComplaint()">Submit</button>
+      <div id="my-complaints" style="margin-top:1rem"></div>
+    </div>
+  </main>
+
+  <script src="/js/api.js?v=2"></script>
+  <script src="/js/nav.js?v=2"></script>
+  <script>
+    requireLogin();
+    renderNav("profile.html");
+    let myId = null;
+
+    async function load() {
+      const res = await api("/api/auth/me");
+      const u = res.data;
+      myId = u.id;
+      document.getElementById("name").value = u.name;
+      document.getElementById("phone").value = u.phone ?? "";
+      document.getElementById("bio").value = u.bio ?? "";
+      loadRatings();
+      loadMyComplaints();
+    }
+
+    async function submitComplaint() {
+      const errorBox = document.getElementById("complaint-error");
+      const okBox = document.getElementById("complaint-ok");
+      errorBox.classList.remove("show");
+      okBox.classList.remove("show");
+      try {
+        await api("/api/complaints", {
+          method: "POST",
+          body: {
+            subject: document.getElementById("complaint-subject").value,
+            message: document.getElementById("complaint-message").value,
+          },
+        });
+        document.getElementById("complaint-subject").value = "";
+        document.getElementById("complaint-message").value = "";
+        okBox.textContent = "Complaint submitted. An admin will review it.";
+        okBox.classList.add("show");
+        loadMyComplaints();
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add("show");
+      }
+    }
+
+    async function loadMyComplaints() {
+      const res = await api("/api/complaints/mine");
+      document.getElementById("my-complaints").innerHTML = res.data.length
+        ? `<table class="data"><thead><tr>
+             <th>Subject</th><th>Status</th><th>Admin response</th><th>Reported</th>
+           </tr></thead><tbody>${res.data.map(c => `
+             <tr><td>${c.subject}</td>
+                 <td><span class="status-badge status-${c.status === "open" ? "pending" : "active"}">${c.status}</span></td>
+                 <td>${c.admin_response ?? ""}</td>
+                 <td style="color:var(--muted)">${c.created_at.slice(0,10)}</td>
+             </tr>`).join("")}</tbody></table>`
+        : "";
+    }
+
+    async function loadRatings() {
+      const res = await api("/api/users/" + myId + "/profile");
+      const p = res.data;
+      if (p.profile_picture) {
+        const img = document.getElementById("avatar");
+        img.src = p.profile_picture;
+        img.hidden = false;
+      }
+      document.getElementById("ratings").innerHTML = p.review_count
+        ? `<p style="margin-bottom:0.6rem"><span class="stars">
+             ${"&#9733;".repeat(Math.round(p.avg_rating))}</span>
+             ${p.avg_rating} average from ${p.review_count} reviews</p>
+           <table class="data"><tbody>${p.reviews.map(r => `
+             <tr><td><span class="stars">${"&#9733;".repeat(r.rating)}</span></td>
+                 <td>${r.comments ?? ""}</td>
+                 <td style="color:var(--muted)">${r.submitted_at.slice(0,10)}</td>
+             </tr>`).join("")}</tbody></table>`
+        : '<p class="empty">No reviews yet.</p>';
+    }
+
+    async function save() {
+      const errorBox = document.getElementById("error");
+      const okBox = document.getElementById("ok");
+      errorBox.classList.remove("show");
+      okBox.classList.remove("show");
+      try {
+        const res = await api("/api/users/me", {
+          method: "PUT",
+          body: {
+            name: document.getElementById("name").value,
+            phone: document.getElementById("phone").value || null,
+            bio: document.getElementById("bio").value || null,
+          },
+        });
+        localStorage.setItem("skillx_name", res.data.name);
+
+        const file = document.getElementById("picture").files[0];
+        if (file) {
+          const form = new FormData();
+          form.append("file", file);
+          await api("/api/users/me/picture", { method: "POST", body: form });
+        }
+        okBox.textContent = "Profile saved.";
+        okBox.classList.add("show");
+        loadRatings();
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add("show");
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

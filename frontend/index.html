@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SkillX</title>
+  <script>
+    /* Landing page: send visitors to the right place. */
+    window.location.href = localStorage.getItem("skillx_token")
+      ? "/dashboard.html" : "/login.html";
+  </script>
+</head>
+<body></body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Certificates - SkillX</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <h1>My certificates</h1>
+    <p class="lede">Earned automatically every 5 completed learning sessions.</p>
+    <div id="list" class="panel"></div>
+
+    <div class="panel" id="learner-certs-panel" hidden>
+      <h2>Certificates earned by your learners</h2>
+      <p class="lede">Students who completed 5+ sessions in skills you teach.</p>
+      <div id="learner-certs"></div>
+    </div>
+  </main>
+
+  <script src="/js/api.js?v=2"></script>
+  <script src="/js/nav.js?v=2"></script>
+  <script>
+    requireLogin();
+    renderNav("certificates.html");
+
+    async function download(id, code) {
+      const res = await fetch("/api/certificates/" + id + "/download", {
+        headers: { Authorization: "Bearer " + getToken() },
+      });
+      if (!res.ok) { alert("Download failed"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = code + ".pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function load() {
+      const res = await api("/api/certificates/mine");
+      const list = document.getElementById("list");
+      list.innerHTML = res.data.length
+        ? `<table class="data"><thead><tr>
+             <th>Code</th><th>Sessions</th><th>Issued</th><th></th>
+           </tr></thead><tbody>${res.data.map(c => `
+             <tr><td>${c.certificate_code}</td>
+                 <td>${c.sessions_completed}</td>
+                 <td>${c.issued_at.slice(0,10)}</td>
+                 <td><button class="small solid"
+                   onclick="download(${c.id},'${c.certificate_code}')">
+                   Download PDF</button></td></tr>`).join("")}</tbody></table>`
+        : '<p class="empty">No certificates yet. Complete 5 sessions to earn your first one.</p>';
+    }
+
+    async function loadLearnerCerts() {
+      const res = await api("/api/certificates/my-learners");
+      if (!res.data.length) return;
+      document.getElementById("learner-certs-panel").hidden = false;
+      document.getElementById("learner-certs").innerHTML =
+        `<table class="data"><thead><tr>
+           <th>Student</th><th>Code</th><th>Sessions</th><th>Issued</th>
+         </tr></thead><tbody>${res.data.map(c => `
+           <tr><td>${c.student}</td><td>${c.certificate_code}</td>
+               <td>${c.sessions_completed}</td>
+               <td>${c.issued_at.slice(0,10)}</td></tr>`).join("")}</tbody></table>`;
+    }
+
+    load();
+    loadLearnerCerts();
+  </script>
+</body>
+</html>
