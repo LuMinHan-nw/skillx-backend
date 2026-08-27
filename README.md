@@ -203,10 +203,9 @@ Group 7, capstone module AAPP011-4-2.
 
 | Name | Role |
 |------|------|
-| Lu Min Han | Project Leader, Integration and Final Documentation |
+| Lu Min Han | Project Leader, Integration and Final Documentation, Testing and QA, API |
 | Zayar Naing | Skill Listing |
 | Zaw | Database and Booking |
 | Sean | Frontend and Certificate |
 | Han Htut Naing | Feedback |
-| Pathmarajah | API and Dashboard |
-| Issac | Testing and QA |
+| Pathmarajah | Dashboard |
