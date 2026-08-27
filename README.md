@@ -195,3 +195,18 @@ be run headlessly with [Newman](https://github.com/postmanlabs/newman):
 ```
 npx newman run tests/postman_collection.json --env-var "base_url=http://127.0.0.1:8000"
 ```
+
+
+## Team
+
+Group 7, capstone module AAPP011-4-2.
+
+| Name | Role |
+|------|------|
+| Lu Min Han | Project Leader, Integration and Final Documentation |
+| Zayar Naing | Skill Listing |
+| Zaw | Database and Booking |
+| Sean | Frontend and Certificate |
+| Han Htut Naing | Feedback |
+| Pathmarajah | API and Dashboard |
+| Issac | Testing and QA |
